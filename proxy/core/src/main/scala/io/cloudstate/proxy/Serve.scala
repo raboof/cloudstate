@@ -40,6 +40,7 @@ import akka.http.scaladsl.model.{
 import akka.http.scaladsl.model.Uri.Path
 import akka.actor.{ActorRef, ActorSystem}
 import akka.event.{Logging, LoggingAdapter}
+import akka.grpc.scaladsl.GrpcExceptionHandler
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.util.ByteString
 import akka.stream.Materializer
@@ -157,10 +158,18 @@ object Serve {
     val grpcProxy = createGrpcApi(entities, router, entityDiscoveryClient, emitters)
     val grpcHandler = Function.unlift { request: HttpRequest =>
       val asResponse = grpcProxy.andThen { futureResult =>
-        Some(futureResult.map {
-          case (headers, messages) =>
-            createResponse(request, headers, messages)
-        })
+        Some(
+          futureResult
+            .map {
+              case (headers, messages) =>
+                createResponse(request, headers, messages)
+            }
+            .recoverWith(throwable => {
+              implicit val writer = GrpcProtocolNative.newWriter(Codecs.negotiate(request))
+              val exceptionHandler = GrpcExceptionHandler.default
+              exceptionHandler(throwable)
+            })
+        )
       }
       asResponse.applyOrElse(request, (_: HttpRequest) => None)
     }
