@@ -198,6 +198,9 @@ class EntityDiscoveryManager(config: EntityDiscoveryManager.Configuration)(
   private final val eventLogEventing = elAndPs.map(_._1)
   private final val projectionSupport = elAndPs.map(_._2)
 
+  log.info(
+    s"Connecting to ${config.userFunctionHost}:${config.userFunctionPort} to discover the user function specification"
+  )
   entityDiscoveryClient.discover(EntityDiscoveryManager.proxyInfo(supportFactories.keys.toSeq)) pipeTo self
 
   val supportedProtocolMajorVersion: Int = BuildInfo.protocolMajorVersion
