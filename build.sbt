@@ -428,9 +428,10 @@ lazy val `proxy-core` = (project in file("proxy/core"))
     // For Google Cloud Pubsub API
     PB.protoSources in Compile += target.value / "protobuf_external" / "google" / "pubsub" / "v1",
     mainClass in Compile := Some("io.cloudstate.proxy.CloudStateProxyMain"),
-    fork in run := true,
+    run / fork := true,
     // In memory journal by default
-    javaOptions in run ++= Seq("-Dconfig.resource=dev-mode.conf"),
+    run / javaOptions ++= Seq("-Dconfig.resource=dev-mode.conf"),
+    reStart / javaOptions ++= Seq("-Dconfig.resource=dev-mode.conf"),
     assemblySettings("akka-proxy.jar"),
     nativeImageDockerSettings,
     proxySettings
