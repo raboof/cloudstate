@@ -55,6 +55,13 @@ class ExceptionHandlingSpec extends WordSpec with Matchers with BeforeAndAfterAl
 
   "Cloudstate proxy" should {
 
+    "respond with gRPC error for request without entity id" in {
+      val call = client.get(Key(""))
+      val error = call.failed.futureValue
+      error shouldBe a[StatusRuntimeException]
+      error.getMessage should be("INVALID_ARGUMENT: entity id not found")
+    }
+
     "respond with gRPC error for action failure in entity" in {
       val call = client.get(Key("one"))
       val connection = service.eventSourced.expectConnection()

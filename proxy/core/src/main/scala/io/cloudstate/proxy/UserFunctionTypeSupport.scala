@@ -19,6 +19,7 @@ package io.cloudstate.proxy
 import java.util.concurrent.TimeUnit
 
 import akka.NotUsed
+import akka.grpc.GrpcServiceException
 import akka.stream.scaladsl.Flow
 import akka.util.Timeout
 import com.google.protobuf.Descriptors.{MethodDescriptor, ServiceDescriptor}
@@ -29,9 +30,11 @@ import io.cloudstate.legacy_entity_key.LegacyEntityKeyProto
 import io.cloudstate.protocol.entity.EntityPassivationStrategy.Strategy
 import io.cloudstate.proxy.entity.{EntityCommand, UserFunctionReply}
 import io.cloudstate.proxy.protobuf.Options
+import io.grpc.Status
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NoStackTrace
 
 trait UserFunctionTypeSupport {
 
@@ -128,16 +131,19 @@ final class EntityMethodDescriptor(val method: MethodDescriptor) {
 
   def keyFieldsCount: Int = keyFields.length
 
-  def extractId(bytes: ByteString): String =
+  def extractId(bytes: ByteString): Option[String] =
     keyFields.length match {
       case 0 =>
-        ""
+        None
       case 1 =>
         val dm = DynamicMessage.parseFrom(method.getInputType, bytes)
-        dm.getField(keyFields.head).toString
+        dm.getField(keyFields.head).toString match {
+          case "" => None
+          case other => Some(other)
+        }
       case _ =>
         val dm = DynamicMessage.parseFrom(method.getInputType, bytes)
-        keyFields.iterator.map(dm.getField).mkString(EntityMethodDescriptor.Separator)
+        Some(keyFields.iterator.map(dm.getField).mkString(EntityMethodDescriptor.Separator))
     }
 
 }
@@ -147,23 +153,40 @@ private final class EntityUserFunctionTypeSupport(serviceDescriptor: ServiceDesc
                                                   entityTypeSupport: EntityTypeSupport)(implicit ec: ExecutionContext)
     extends UserFunctionTypeSupport {
 
+  val entityIdNotFound = new GrpcServiceException(Status.INVALID_ARGUMENT.withDescription("entity id not found"))
+  with NoStackTrace
+
   override def handler(name: String,
                        metadata: Metadata): Flow[UserFunctionRouter.Message, UserFunctionReply, NotUsed] = {
     val method = methodDescriptor(name)
-    Flow[UserFunctionRouter.Message].map(ufToEntityCommand(method)).via(entityTypeSupport.handler(method, metadata))
+    Flow[UserFunctionRouter.Message]
+      .map { message =>
+        ufToEntityCommand(method)(message) match {
+          case Some(command) => command
+          case None => throw entityIdNotFound
+        }
+      }
+      .via(entityTypeSupport.handler(method, metadata))
   }
 
   override def handleUnary(commandName: String, message: UserFunctionRouter.Message): Future[UserFunctionReply] =
-    entityTypeSupport.handleUnary(ufToEntityCommand(methodDescriptor(commandName))(message))
+    ufToEntityCommand(methodDescriptor(commandName))(message) match {
+      case Some(command) => entityTypeSupport.handleUnary(command)
+      case None => Future.failed(entityIdNotFound)
+    }
 
-  private def ufToEntityCommand(method: EntityMethodDescriptor): UserFunctionRouter.Message => EntityCommand = {
+  private def ufToEntityCommand(method: EntityMethodDescriptor): UserFunctionRouter.Message => Option[EntityCommand] = {
     command =>
-      val entityId = method.extractId(command.payload.value)
-      EntityCommand(entityId = entityId,
-                    name = method.method.getName,
-                    payload = Some(command.payload),
-                    streamed = method.method.isServerStreaming,
-                    metadata = Some(command.metadata))
+      method
+        .extractId(command.payload.value)
+        .map(
+          entityId =>
+            EntityCommand(entityId = entityId,
+                          name = method.method.getName,
+                          payload = Some(command.payload),
+                          streamed = method.method.isServerStreaming,
+                          metadata = Some(command.metadata))
+        )
   }
 
   private def methodDescriptor(name: String): EntityMethodDescriptor =
