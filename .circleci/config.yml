@@ -72,6 +72,89 @@ commands:
 
 jobs:
 
+  check-scalafmt:
+    docker:
+    - image: cimg/openjdk:11.0
+    description: "Format checks"
+    steps:
+    - checkout
+    - setup_sbt
+    - restore_sbt_cache
+    - run:
+        name: Run scalafmt checks
+        command: |
+          sbt scalafmtCheckAll scalafmtSbtCheck || \
+            { echo "[error] Code not formatted prior to commit. Run 'sbt scalafmtAll scalafmtSbt' then commit the reformatted code."; false; }
+    - save_sbt_cache
+
+  test-sbt:
+    docker:
+    - image: cimg/openjdk:11.0
+    description: "sbt tests"
+    steps:
+    - checkout
+    - setup_sbt
+    - restore_sbt_cache
+    - run:
+        name: Run sbt tests
+        command: sbt 'set concurrentRestrictions in Global += Tags.limitAll(1)' test
+    - save_sbt_cache
+
+  test-node-support:
+    docker:
+    - image: cimg/node:12.20.1
+    description: "node-support tests"
+    steps:
+    - checkout
+    - run:
+        name: Run node-support tests
+        command: |
+          cd node-support && npm install && npm test && cd -
+          cd node-support/docs/src/modules/javascript/examples && npm install && npm test && cd -
+          cd samples/js-shopping-cart && npm install && npm test && cd -
+
+  validate-docs:
+    machine: true
+    description: "validate docs"
+    steps:
+    - checkout
+    - install-java-11
+    - setup_sbt
+    - restore_sbt_cache
+    - run:
+        name: Validate docs
+        command: |
+          make -C docs
+          make -C java-support/docs
+          source /opt/circleci/.nvm/nvm.sh
+          cd node-support && nvm install && cd -
+          make -C node-support/docs
+    - save_sbt_cache
+
+  tck-integration-tests:
+    machine: true
+    description: "TCK integration tests"
+    steps:
+      - checkout
+      - install-java-11
+      - setup_sbt
+      - restore_sbt_cache
+      - run:
+          name: Run npm install
+          command: |
+            source /opt/circleci/.nvm/nvm.sh
+            cd node-support && nvm install && npm install && cd -
+            cd node-support/tck && nvm install && npm install && cd -
+      - run:
+          name: Run TCK integration tests
+          command: |
+            source /opt/circleci/.nvm/nvm.sh && cd node-support && nvm use && cd -
+            sbt \
+              'set concurrentRestrictions in Global += Tags.limitAll(1)' \
+              'set scalafmtOnCompile := false' \
+              tck/it:test
+      - save_sbt_cache
+
   build-core-native-image:
     machine: true
     resource_class: large
@@ -159,6 +242,7 @@ jobs:
         root: /tmp/workspace
         paths:
         - cloudstate-sbt-images.tar
+    - save_sbt_cache
 
   build-operator:
     docker:
@@ -362,6 +446,15 @@ jobs:
             docker push cloudstateio/cloudstate-proxy-native-cassandra:latest
 
 workflows:
+  Checks:
+    jobs:
+      - check-scalafmt
+  Tests:
+    jobs:
+      - test-sbt
+      - test-node-support
+      - validate-docs
+      - tck-integration-tests
   Integration tests:
     jobs:
       - build-operator
@@ -400,13 +493,14 @@ workflows:
       #     - build-operator
       #     - build-sbt-images
       #     - build-cassandra-native-image
-      - publish-native-images:
-          name: Publish native images to docker hub
-          requires:
-            - build-core-native-image
-            - build-postgres-native-image
-            - build-cassandra-native-image
-          filters:
-            branches:
-              only:
-                - master
+      # - publish-native-images:
+      # Disabled. No publishing of images from private fork, yet.
+      #     name: Publish native images to docker hub
+      #     requires:
+      #       - build-core-native-image
+      #       - build-postgres-native-image
+      #       - build-cassandra-native-image
+      #     filters:
+      #       branches:
+      #         only:
+      #           - master
