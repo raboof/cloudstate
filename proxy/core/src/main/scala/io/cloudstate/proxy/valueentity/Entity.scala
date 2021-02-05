@@ -187,7 +187,7 @@ object ValueEntity {
       replyTo: ActorRef
   )
 
-  private case class ReadStateSuccess(initialized: Boolean)
+  private case class ReadStateSuccess(initialState: Option[com.google.protobuf.any.Any])
   private case class ReadStateFailure(cause: Throwable)
 
   private sealed trait DatabaseOperationWriteStatus
@@ -222,7 +222,6 @@ final class ValueEntity(configuration: ValueEntity.Configuration,
   private[this] final var currentCommand: ValueEntity.OutstandingCommand = null
   private[this] final var stopped = false
   private[this] final var idCounter = 0L
-  private[this] final var inited = false
   private[this] final var commandStartTime = 0L
 
   // Set up passivation timer
@@ -231,25 +230,8 @@ final class ValueEntity(configuration: ValueEntity.Configuration,
   override final def preStart(): Unit =
     repository
       .get(Key(persistenceId, entityId))
-      .map { state =>
-        if (!inited) {
-          relay ! ValueEntityStreamIn(
-            ValueEntityStreamIn.Message.Init(
-              ValueEntityInit(
-                serviceName = configuration.serviceName,
-                entityId = entityId,
-                state = Some(ValueEntityInitState(state))
-              )
-            )
-          )
-          ValueEntity.ReadStateSuccess(false) // not initialized yet!
-        } else {
-          ValueEntity.ReadStateSuccess(true) // already initialized!
-        }
-      }
-      .recover {
-        case error => ValueEntity.ReadStateFailure(error)
-      }
+      .map(ValueEntity.ReadStateSuccess(_))
+      .recover(ValueEntity.ReadStateFailure(_))
       .pipeTo(self)
 
   override final def postStop(): Unit =
@@ -309,13 +291,21 @@ final class ValueEntity(configuration: ValueEntity.Configuration,
       clientAction = Some(ClientAction(ClientAction.Action.Failure(Failure(description = message))))
     )
 
-  override final def receive: Receive = {
-    case ValueEntity.ReadStateSuccess(initialize) =>
-      if (!initialize) {
-        inited = true
-        context.become(running)
-        unstashAll()
-      }
+  override final def receive: Receive = waitingForInitialValue
+
+  def waitingForInitialValue: Receive = {
+    case ValueEntity.ReadStateSuccess(initialState) =>
+      relay ! ValueEntityStreamIn(
+        ValueEntityStreamIn.Message.Init(
+          ValueEntityInit(
+            serviceName = configuration.serviceName,
+            entityId = entityId,
+            state = Some(ValueEntityInitState(initialState))
+          )
+        )
+      )
+      context.become(running)
+      unstashAll()
 
     case ValueEntity.ReadStateFailure(error) =>
       throw error
