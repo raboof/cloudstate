@@ -35,13 +35,13 @@ name := "cloudstate"
 val ProtocolMajorVersion = 0
 val ProtocolMinorVersion = 2
 
-val GrpcJavaVersion = "1.30.2" // Note: sync with gRPC version in Akka gRPC
+val GrpcJavaVersion = akka.grpc.gen.BuildInfo.grpcVersion
 // Unfortunately we need to downgrade grpc-netty-shaded
 // in the proxy until we have a fix to make it work with
 // native-image
 val GrpcNettyShadedVersion = "1.28.1"
 val AkkaVersion = "2.6.9"
-val AkkaHttpVersion = "10.1.12" // Note: sync with Akka HTTP version in Akka gRPC
+val AkkaHttpVersion = akka.grpc.gen.BuildInfo.akkaHttpVersion
 val AkkaManagementVersion = "1.0.8"
 val AkkaPersistenceSpannerVersion = "1.0.0-RC5"
 val AkkaProjectionsVersion = "1.0.0"
@@ -244,7 +244,6 @@ lazy val `proxy-core` = (project in file("proxy/core"))
         "protocolMinorVersion" -> ProtocolMinorVersion
       ),
     buildInfoPackage := "io.cloudstate.proxy",
-    dependencyOverrides += "io.grpc" % "grpc-netty-shaded" % GrpcNettyShadedVersion,
     libraryDependencies ++= Seq(
         // Since we exclude Aeron, we also exclude its transitive Agrona dependency, so we need to manually add it HERE
         "org.agrona" % "agrona" % "0.9.29",
@@ -305,7 +304,6 @@ lazy val `proxy-spanner` = (project in file("proxy/spanner"))
   .settings(
     common,
     name := "cloudstate-proxy-spanner",
-    dependencyOverrides += "io.grpc" % "grpc-netty-shaded" % GrpcNettyShadedVersion,
     libraryDependencies ++= Seq(
         "com.lightbend.akka" %% "akka-persistence-spanner" % AkkaPersistenceSpannerVersion,
         akkaDependency("akka-cluster-typed"), // Transitive dependency of akka-persistence-spanner
