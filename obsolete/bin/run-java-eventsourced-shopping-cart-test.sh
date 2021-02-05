@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Run the Java value-based Entity shopping cart sample as a test, with a given persistence store.
+# Run the Java Event Sourced shopping cart sample as a test, with a given persistence store.
 #
-# run-java-shopping-cart-test.sh [inmemory]
+# run-java-eventsourced-shopping-cart-test.sh [inmemory|postgres|cassandra]
 
 set -e
 
 echo
-echo "=== Running java-shopping-cart test ==="
+echo "=== Running java-eventsourced-shopping-cart test ==="
 echo
 
 # process arguments
@@ -27,12 +27,12 @@ done
 set -- "${residual[@]}"
 store="$1"
 
-# Build the java value-based entity shopping cart
+# Build the java eventsourced shopping cart
 if [ "$build" == true ] ; then
   echo
-  echo "Building java-shopping-cart ..."
+  echo "Building java-eventsourced-shopping-cart ..."
   [ -f docker-env.sh ] && source docker-env.sh
-  sbt -Ddocker.username=cloudstatedev -Ddocker.tag=dev java-shopping-cart/docker:publishLocal
+  sbt -Ddocker.username=cloudstatedev -Ddocker.tag=dev java-eventsourced-shopping-cart/docker:publishLocal
 fi
 
 statefulstore="inmemory"
@@ -40,7 +40,72 @@ statefulservice="shopping-cart-$statefulstore"
 
 case "$store" in
 
-  inmemory | * ) # deploy the value-based entity-shopping-cart with in-memory store
+  postgres ) # deploy the eventsourced shopping-cart with postgres store
+
+  statefulstore="postgres"
+  statefulservice="shopping-cart-$statefulstore"
+
+  kubectl apply -f - <<YAML
+apiVersion: cloudstate.io/v1alpha1
+kind: StatefulStore
+metadata:
+  name: $statefulstore
+spec:
+  postgres:
+    host: postgres-postgresql.default.svc.cluster.local
+    credentials:
+      secret:
+        name: postgres-credentials
+---
+apiVersion: cloudstate.io/v1alpha1
+kind: StatefulService
+metadata:
+  name: $statefulservice
+spec:
+  storeConfig:
+    statefulStore:
+      name: $statefulstore
+  containers:
+    - image: cloudstateio/java-eventsourced-shopping-cart:latest
+      imagePullPolicy: Never
+      name: user-function
+YAML
+;;
+
+  cassandra ) # deploy the eventsourced shopping-cart with cassandra store
+
+  statefulstore="cassandra"
+  statefulservice="shopping-cart-$statefulstore"
+
+  kubectl apply -f - <<YAML
+apiVersion: cloudstate.io/v1alpha1
+kind: StatefulStore
+metadata:
+  name: $statefulstore
+spec:
+  cassandra:
+    host: cassandra.default.svc.cluster.local
+    credentials:
+      secret:
+        name: cassandra-credentials
+---
+apiVersion: cloudstate.io/v1alpha1
+kind: StatefulService
+metadata:
+  name: $statefulservice
+spec:
+  storeConfig:
+    statefulStore:
+      name: $statefulstore
+    database: shoppingcart
+  containers:
+    - image: cloudstateio/java-eventsourced-shopping-cart:latest
+      imagePullPolicy: Never
+      name: user-function
+YAML
+;;
+
+  inmemory | * ) # deploy the eventsourced shopping-cart with in-memory store
 
   statefulstore="inmemory"
   statefulservice="shopping-cart-$statefulstore"
@@ -62,7 +127,7 @@ spec:
     statefulStore:
       name: $statefulstore
   containers:
-    - image: cloudstateio/java-shopping-cart:latest
+    - image: cloudstateio/java-eventsourced-shopping-cart:latest
       imagePullPolicy: Never
       name: user-function
 YAML
@@ -110,7 +175,7 @@ function fail_with_details {
 # Wait for the deployment to be available
 echo
 echo "Waiting for deployment to be ready..."
-kubectl rollout status --timeout=5m deployment/$deployment || fail_with_details
+kubectl rollout status --timeout=1m deployment/$deployment || fail_with_details
 kubectl get deployment $deployment
 
 # Scale up the deployment, to test with akka clustering
@@ -126,11 +191,11 @@ kubectl rollout status --timeout=5m deployment/$deployment || fail_with_details
 kubectl get deployment $deployment
 [ $(kubectl get deployment $deployment -o "jsonpath={.status.availableReplicas}") -eq 3 ] || fail_with_details "Expected 3 available replicas"
 
-# Expose the value-based entity-shopping-cart service
+# Expose the eventsourced-shopping-cart service
 nodeport="$deployment-node-port"
 kubectl expose deployment $deployment --name=$nodeport --port=8013 --type=NodePort
 
-# Get the URL for the value-based entity-shopping-cart service
+# Get the URL for the eventsourced-shopping-cart service
 url=$(minikube service $nodeport --url)
 
 # Now we use the REST interface to test it (because it's easier to use curl than a grpc
@@ -143,11 +208,11 @@ non_empty_cart='{"items":[{"productId":"foo","name":"A foo","quantity":10}]}'
 for i in {1..9} ; do
   cart_id="test$i"
   echo
-  echo "Testing value-based entity shopping cart $cart_id ..."
+  echo "Testing eventsourced shopping cart $cart_id ..."
 
   initial_cart=''
   for attempt in {1..5} ; do
-    initial_cart=$(curl -s $url/ve/carts/$cart_id || echo '')
+    initial_cart=$(curl -s $url/carts/$cart_id || echo '')
     [ -n "$initial_cart" ] && break || sleep 1
   done
 
@@ -160,28 +225,16 @@ for i in {1..9} ; do
       echo "Initial request for $cart_id succeeded."
   fi
 
-  curl -s -X POST $url/ve/cart/$cart_id/items/add -H "Content-Type: application/json" -d "$post" > /dev/null
+  curl -s -X POST $url/cart/$cart_id/items/add -H "Content-Type: application/json" -d "$post" > /dev/null
 
-  new_cart=$(curl -s $url/ve/carts/$cart_id)
+  new_cart=$(curl -s $url/carts/$cart_id)
   if [[ "$non_empty_cart" != "$new_cart" ]]
   then
       echo "Expected '$non_empty_cart'"
       echo "But got '$new_cart'"
       fail_with_details
   else
-      echo "Value-based Entity shopping cart update for $cart_id succeeded."
-  fi
-
-  curl -s -X POST $url/ve/carts/$cart_id/remove -H "Content-Type: application/json" -d '{"userId": "'"$cart_id"'"}' > /dev/null
-
-  deleted_cart=$(curl -s $url/ve/carts/$cart_id)
-  if [[ "$empty_cart" != "$deleted_cart" ]]
-  then
-      echo "Expected '$empty_cart'"
-      echo "But got '$deleted_cart'"
-      fail_with_details
-  else
-      echo "Value-based Entity shopping cart delete for $cart_id succeeded."
+      echo "EventSourced Shopping cart update for $cart_id succeeded."
   fi
 done
 
@@ -193,7 +246,7 @@ if [ "$logs" == true ] ; then
   kubectl logs -l cloudstate.io/stateful-service=$statefulservice -c cloudstate-sidecar --tail=-1
 fi
 
-# Delete value-based entity-shopping-cart
+# Delete eventsourced shopping-cart
 if [ "$delete" == true ] ; then
   echo
   echo "Deleting $statefulservice ..."

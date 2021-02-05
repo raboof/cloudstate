@@ -2,7 +2,7 @@
 #
 # Run the Java Event Sourced shopping cart sample as a test, with a given persistence store.
 #
-# run-java-eventsourced-shopping-cart-test.sh [inmemory|postgres|cassandra]
+# run-java-eventsourced-shopping-cart-test.sh [inmemory]
 
 set -e
 
@@ -39,71 +39,6 @@ statefulstore="inmemory"
 statefulservice="shopping-cart-$statefulstore"
 
 case "$store" in
-
-  postgres ) # deploy the eventsourced shopping-cart with postgres store
-
-  statefulstore="postgres"
-  statefulservice="shopping-cart-$statefulstore"
-
-  kubectl apply -f - <<YAML
-apiVersion: cloudstate.io/v1alpha1
-kind: StatefulStore
-metadata:
-  name: $statefulstore
-spec:
-  postgres:
-    host: postgres-postgresql.default.svc.cluster.local
-    credentials:
-      secret:
-        name: postgres-credentials
----
-apiVersion: cloudstate.io/v1alpha1
-kind: StatefulService
-metadata:
-  name: $statefulservice
-spec:
-  storeConfig:
-    statefulStore:
-      name: $statefulstore
-  containers:
-    - image: cloudstateio/java-eventsourced-shopping-cart:latest
-      imagePullPolicy: Never
-      name: user-function
-YAML
-;;
-
-  cassandra ) # deploy the eventsourced shopping-cart with cassandra store
-
-  statefulstore="cassandra"
-  statefulservice="shopping-cart-$statefulstore"
-
-  kubectl apply -f - <<YAML
-apiVersion: cloudstate.io/v1alpha1
-kind: StatefulStore
-metadata:
-  name: $statefulstore
-spec:
-  cassandra:
-    host: cassandra.default.svc.cluster.local
-    credentials:
-      secret:
-        name: cassandra-credentials
----
-apiVersion: cloudstate.io/v1alpha1
-kind: StatefulService
-metadata:
-  name: $statefulservice
-spec:
-  storeConfig:
-    statefulStore:
-      name: $statefulstore
-    database: shoppingcart
-  containers:
-    - image: cloudstateio/java-eventsourced-shopping-cart:latest
-      imagePullPolicy: Never
-      name: user-function
-YAML
-;;
 
   inmemory | * ) # deploy the eventsourced shopping-cart with in-memory store
 

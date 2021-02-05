@@ -15,3 +15,9 @@ addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.4.2")
 addSbtPlugin("de.heikoseeberger" % "sbt-header" % "5.6.0")
 
 addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.10.0")
+
+addSbtPlugin("org.foundweekends" % "sbt-bintray" % "0.5.6")
+
+addSbtPlugin("io.cloudstate" % "sbt-cloudstate-paradox" % "0.1.3")
+
+addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.10.0-RC1")

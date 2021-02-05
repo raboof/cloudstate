@@ -2,7 +2,7 @@
 #
 # Run the Java value-based Entity shopping cart sample as a test, with a given persistence store.
 #
-# run-java-shopping-cart-test.sh [inmemory]
+# run-java-shopping-cart-test.sh [inmemory|postgres]
 
 set -e
 
@@ -39,6 +39,38 @@ statefulstore="inmemory"
 statefulservice="shopping-cart-$statefulstore"
 
 case "$store" in
+
+  postgres ) # deploy the value-based entity-shopping-cart with postgres store
+
+  statefulstore="postgres"
+  statefulservice="shopping-cart-$statefulstore"
+
+  kubectl apply -f - <<YAML
+apiVersion: cloudstate.io/v1alpha1
+kind: StatefulStore
+metadata:
+  name: $statefulstore
+spec:
+  postgres:
+    host: postgres-postgresql.default.svc.cluster.local
+    credentials:
+      secret:
+        name: postgres-credentials
+---
+apiVersion: cloudstate.io/v1alpha1
+kind: StatefulService
+metadata:
+  name: $statefulservice
+spec:
+  storeConfig:
+    statefulStore:
+      name: $statefulstore
+  containers:
+    - image: cloudstateio/java-shopping-cart:latest
+      imagePullPolicy: Never
+      name: user-function
+YAML
+;;
 
   inmemory | * ) # deploy the value-based entity-shopping-cart with in-memory store
 

@@ -155,69 +155,6 @@ jobs:
               tck/it:test
       - save_sbt_cache
 
-  build-core-native-image:
-    machine: true
-    resource_class: large
-    description: "Build core native image"
-    steps:
-    - checkout
-    - install-java-11
-    - setup_sbt
-    - restore_sbt_cache
-    - run:
-        name: Build sbt native image
-        command: sbt "dockerBuildNativeCore publishLocal"
-    - save_docker_image:
-        tar_file: cloudstate-proxy-native-core.tar
-        docker_image: cloudstateio/cloudstate-proxy-native-core:latest
-    - persist_to_workspace:
-        root: /tmp/workspace
-        paths:
-        - cloudstate-proxy-native-core.tar
-    - save_sbt_cache
-
-  build-postgres-native-image:
-    machine: true
-    resource_class: large
-    description: "Build postgres native images"
-    steps:
-    - checkout
-    - install-java-11
-    - setup_sbt
-    - restore_sbt_cache
-    - run:
-        name: Build sbt native images
-        command: sbt "dockerBuildNativePostgres publishLocal"
-    - save_docker_image:
-        tar_file: cloudstate-proxy-native-postgres.tar
-        docker_image: cloudstateio/cloudstate-proxy-native-postgres:latest
-    - persist_to_workspace:
-        root: /tmp/workspace
-        paths:
-        - cloudstate-proxy-native-postgres.tar
-    - save_sbt_cache
-
-  build-cassandra-native-image:
-    machine: true
-    resource_class: large
-    description: "Build cassandra native images"
-    steps:
-    - checkout
-    - install-java-11
-    - setup_sbt
-    - restore_sbt_cache
-    - run:
-        name: Build sbt native images
-        command: sbt "dockerBuildNativeCassandra publishLocal"
-    - save_docker_image:
-        tar_file: cloudstate-proxy-native-cassandra.tar
-        docker_image: cloudstateio/cloudstate-proxy-native-cassandra:latest
-    - persist_to_workspace:
-        root: /tmp/workspace
-        paths:
-        - cloudstate-proxy-native-cassandra.tar
-    - save_sbt_cache
-
   build-sbt-images:
     docker:
     - image: cimg/openjdk:11.0
@@ -230,14 +167,12 @@ jobs:
     - run:
         name: Build sbt images
         command: |
-          sbt 'dockerBuildCore publishLocal' \
-            'dockerBuildPostgres publishLocal' \
-            'dockerBuildCassandra publishLocal' \
+          sbt proxy-core/docker:publishLocal \
             java-shopping-cart/docker:publishLocal \
             java-eventsourced-shopping-cart/docker:publishLocal
     - save_docker_image:
         tar_file: cloudstate-sbt-images.tar
-        docker_image: cloudstateio/cloudstate-proxy-core:latest cloudstateio/cloudstate-proxy-postgres:latest cloudstateio/cloudstate-proxy-cassandra:latest cloudstateio/java-shopping-cart:latest cloudstateio/java-eventsourced-shopping-cart:latest
+        docker_image: cloudstateio/cloudstate-proxy-core:latest cloudstateio/java-shopping-cart:latest cloudstateio/java-eventsourced-shopping-cart:latest
     - persist_to_workspace:
         root: /tmp/workspace
         paths:
@@ -275,36 +210,6 @@ jobs:
         paths:
         - /go/pkg/mod
 
-  native-image-it-test:
-    machine: true
-    resource_class: large
-    description: "native image tck tests"
-    steps:
-      - checkout
-      - install-java-11
-      - setup_sbt
-      - restore_sbt_cache
-      - attach_workspace:
-          at: /tmp/workspace
-      - run:
-          name: Load docker images
-          command: docker image load < /tmp/workspace/cloudstate-proxy-native-core.tar
-      - run:
-          name: Run npm install
-          command: |
-            source /opt/circleci/.nvm/nvm.sh
-            cd node-support && nvm install && npm install && cd -
-            cd node-support/tck && nvm install && npm install && cd -
-      - run:
-          name: Run TCK with native image
-          command: |
-            source /opt/circleci/.nvm/nvm.sh && cd node-support && nvm use && cd -
-            sbt -Dconfig.resource=native-image.conf \
-              'set concurrentRestrictions in Global += Tags.limitAll(1)' \
-              'set scalafmtOnCompile := false' \
-              tck/it:test
-      - save_sbt_cache
-
   minikube-smoke-test:
     machine: true
     resource_class: large
@@ -333,117 +238,12 @@ jobs:
                 kubectl logs -l control-plane=controller-manager -n cloudstate-system -c manager
                 exit 1
             fi
-
-      - run:
-          name: Install Postgres
-          command: bin/install-postgres.sh
-      - run:
-          name: Install Cassandra
-          command: bin/install-cassandra.sh
       - run:
           name: Run value-based shopping cart test (InMemory)
           command: bin/run-java-shopping-cart-test.sh InMemory --no-build
       - run:
-          name: Run value-based shopping cart test (Postgres)
-          command: bin/run-java-shopping-cart-test.sh Postgres --no-build
-      - run:
           name: Run eventsourced shopping cart test (InMemory)
           command: bin/run-java-eventsourced-shopping-cart-test.sh InMemory --no-build
-      - run:
-          name: Run eventsourced shopping cart test (Postgres)
-          command: bin/run-java-eventsourced-shopping-cart-test.sh Postgres --no-build
-      - run:
-          name: Run eventsourced shopping cart test (Cassandra)
-          command: bin/run-java-eventsourced-shopping-cart-test.sh Cassandra --no-build
-
-  native-image-smoke-test:
-    parameters:
-      proxy-store:
-        type: string
-        default: "inmemory"
-    machine: true
-    resource_class: large
-    steps:
-      - checkout
-      - setup_minikube
-      - attach_workspace:
-          at: /tmp/workspace
-      - run:
-          name: Load docker images
-          command: |
-            docker image load < /tmp/workspace/cloudstate-sbt-images.tar
-            docker image load < /tmp/workspace/cloudstate-operator.tar
-      - run: KUSTOMIZE=yes bin/setup-devtools.sh
-      - run:
-          name: Deploy Cloudstate
-          command: |
-            kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.16.1/cert-manager.yaml
-            echo "Waiting for cert-manager to be ready..."
-            kubectl wait --for=condition=available --timeout=2m -n cert-manager deployment/cert-manager-webhook
-            # Note, can't use kubectl -k here, there's a bug
-            kustomize build cloudstate-operator/config/native-image > /tmp/cloudstate-native-image.yaml
-            kubectl apply --validate=false -f /tmp/cloudstate-native-image.yaml
-            echo "Waiting for operator deployment to be ready..."
-            if ! kubectl wait --for=condition=available --timeout=2m -n cloudstate-system deployment/cloudstate-controller-manager
-            then
-                kubectl describe -n cloudstate-system deployment/cloudstate-controller-manager
-                kubectl describe -n cloudstate-system pods -l control-plane=controller-manager
-                kubectl logs -l control-plane=controller-manager -n cloudstate-system -c manager
-                exit 1
-            fi
-      - when:
-          condition:
-            equal: [ InMemory, << parameters.proxy-store >> ]
-          steps:
-          - run:
-              name: Load in memory image
-              command: docker image load < /tmp/workspace/cloudstate-proxy-native-core.tar
-          - run:
-              name: Run value-based shopping cart test (InMemory)
-              command: bin/run-java-shopping-cart-test.sh InMemory --no-build
-      - when:
-          condition:
-            equal: [ Postgres, << parameters.proxy-store >> ]
-          steps:
-            - run:
-                name: Install Postgres
-                command: |
-                  bin/install-postgres.sh
-                  docker image load < /tmp/workspace/cloudstate-proxy-native-postgres.tar
-            - run:
-                name: Run value-based shopping cart test (Postgres)
-                command: bin/run-java-shopping-cart-test.sh Postgres --no-build
-      - when:
-          condition:
-            equal: [ Cassandra, << parameters.proxy-store >> ]
-          steps:
-            - run:
-                name: Install Cassandra
-                command: |
-                  bin/install-cassandra.sh
-                  docker image load < /tmp/workspace/cloudstate-proxy-native-cassandra.tar
-      - run:
-          name: Run eventsourced shopping cart test (<< parameters.proxy-store >>)
-          command: bin/run-java-eventsourced-shopping-cart-test.sh << parameters.proxy-store >> --no-build
-
-  publish-native-images:
-    machine: true
-    steps:
-      - attach_workspace:
-          at: /tmp/workspace
-      - run:
-          name: Load docker images
-          command: |
-            docker image load < /tmp/workspace/cloudstate-proxy-native-core.tar
-            docker image load < /tmp/workspace/cloudstate-proxy-native-postgres.tar
-            docker image load < /tmp/workspace/cloudstate-proxy-native-cassandra.tar
-      - run:
-          name: Push docker images
-          command: |
-            echo "$DOCKER_PASSWORD" | docker login -u cloudstatebot --password-stdin
-            docker push cloudstateio/cloudstate-proxy-native-core:latest
-            docker push cloudstateio/cloudstate-proxy-native-postgres:latest
-            docker push cloudstateio/cloudstate-proxy-native-cassandra:latest
 
 workflows:
   Checks:
@@ -459,48 +259,8 @@ workflows:
     jobs:
       - build-operator
       - build-sbt-images
-      - build-core-native-image
-      - build-postgres-native-image
-      - build-cassandra-native-image
-      - native-image-it-test:
-          name: Native-image TCK integration tests
-          requires:
-            - build-core-native-image
       - minikube-smoke-test:
           name: Minikube smoke test
           requires:
             - build-operator
             - build-sbt-images
-      - native-image-smoke-test:
-          name: Native-image InMemory smoke test
-          proxy-store: InMemory
-          requires:
-          - build-operator
-          - build-sbt-images
-          - build-core-native-image
-      - native-image-smoke-test:
-          name: Native-image Postgres smoke test
-          proxy-store: Postgres
-          requires:
-          - build-operator
-          - build-sbt-images
-          - build-postgres-native-image
-      # Disabled. See https://github.com/cloudstateio/cloudstate/issues/527
-      # - native-image-smoke-test:
-      #     name: Native-image Cassandra smoke test
-      #     proxy-store: Cassandra
-      #     requires:
-      #     - build-operator
-      #     - build-sbt-images
-      #     - build-cassandra-native-image
-      # - publish-native-images:
-      # Disabled. No publishing of images from private fork, yet.
-      #     name: Publish native images to docker hub
-      #     requires:
-      #       - build-core-native-image
-      #       - build-postgres-native-image
-      #       - build-cassandra-native-image
-      #     filters:
-      #       branches:
-      #         only:
-      #           - master
