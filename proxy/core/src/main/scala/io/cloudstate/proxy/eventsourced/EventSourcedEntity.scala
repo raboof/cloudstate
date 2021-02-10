@@ -50,7 +50,7 @@ object EventSourcedEntitySupervisor {
  * Firstly, when the StateManager crashes, we don't want it restarted. Cluster sharding restarts, and there's no way
  * to customise that.
  *
- * Secondly, we need to ensure that we have an Akka Streams actorRef source to publish messages two before Akka
+ * Secondly, we need to ensure that we have an Akka Streams actorRef source to publish messages to before Akka
  * persistence starts feeding us events. There's a race condition if we do this in the same persistent actor. This
  * establishes that connection first.
  */
