@@ -175,7 +175,7 @@ object ValueEntity {
 
   final case class Configuration(
       serviceName: String,
-      userFunctionName: String,
+      persistenceId: String,
       passivationTimeout: Timeout,
       sendQueueSize: Int
   )
@@ -213,8 +213,6 @@ final class ValueEntity(configuration: ValueEntity.Configuration,
 
   private implicit val ec = context.dispatcher
 
-  private val persistenceId: String = configuration.userFunctionName + entityId
-
   private val actorId = ValueEntity.actorCounter.incrementAndGet()
 
   private[this] final var stashedCommands = Queue.empty[(EntityCommand, ActorRef)] // PERFORMANCE: look at options for data structures
@@ -228,7 +226,7 @@ final class ValueEntity(configuration: ValueEntity.Configuration,
 
   override final def preStart(): Unit =
     repository
-      .get(Key(persistenceId, entityId))
+      .get(Key(configuration.persistenceId, entityId))
       .map(ValueEntity.ReadStateSuccess(_))
       .recover(ValueEntity.ReadStateFailure(_))
       .pipeTo(self)
@@ -398,7 +396,7 @@ final class ValueEntity(configuration: ValueEntity.Configuration,
     action.action match {
       case Update(ValueEntityUpdate(Some(value), _)) =>
         repository
-          .update(Key(persistenceId, entityId), value)
+          .update(Key(configuration.persistenceId, entityId), value)
           .map { _ =>
             ValueEntity.WriteStateSuccess(reply)
           }
@@ -408,7 +406,7 @@ final class ValueEntity(configuration: ValueEntity.Configuration,
 
       case Delete(_) =>
         repository
-          .delete(Key(persistenceId, entityId))
+          .delete(Key(configuration.persistenceId, entityId))
           .map { _ =>
             ValueEntity.WriteStateSuccess(reply)
           }

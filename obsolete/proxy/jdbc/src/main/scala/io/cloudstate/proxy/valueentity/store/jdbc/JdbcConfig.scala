@@ -24,12 +24,12 @@ import slick.jdbc.{JdbcBackend, JdbcProfile}
 class JdbcEntityTableColumnNames(config: Config) {
   private val cfg = config.getConfig("tables.state.columnNames")
 
-  val persistentId: String = cfg.getString("persistentId")
+  val persistenceId: String = cfg.getString("persistenceId")
   val entityId: String = cfg.getString("entityId")
   val typeUrl: String = cfg.getString("typeUrl")
   val state: String = cfg.getString("state")
 
-  override def toString: String = s"JdbcEntityTableColumnNames($persistentId,$entityId,$typeUrl,$state)"
+  override def toString: String = s"JdbcEntityTableColumnNames($persistenceId,$entityId,$typeUrl,$state)"
 }
 
 class JdbcEntityTableConfiguration(config: Config) {

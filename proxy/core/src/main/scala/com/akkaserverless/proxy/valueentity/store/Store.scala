@@ -22,7 +22,7 @@ import scala.concurrent.Future
 
 object Store {
 
-  case class Key(persistentId: String, entityId: String)
+  case class Key(persistenceId: String, entityId: String)
 
   /** Value to persist with its type url and its content */
   case class Value(typeUrl: String, state: ByteString)

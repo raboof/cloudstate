@@ -62,7 +62,7 @@ class EntityPassivateSpec extends AbstractTelemetrySpec {
 
       val entityConfiguration = ValueEntity.Configuration(
         serviceName = "service",
-        userFunctionName = "test",
+        persistenceId = "test",
         passivationTimeout = 30.seconds,
         sendQueueSize = 100
       )

@@ -28,7 +28,7 @@ private[store] class JdbcEntityQueries(val profile: JdbcProfile,
 
   def selectByKey(key: Key): Query[Entity, EntityRow, Seq] =
     EntityTable
-      .filter(_.persistentId === key.persistentId)
+      .filter(_.persistenceId === key.persistenceId)
       .filter(_.entityId === key.entityId)
       .take(1)
 
@@ -36,7 +36,7 @@ private[store] class JdbcEntityQueries(val profile: JdbcProfile,
 
   def deleteByKey(key: Key) =
     EntityTable
-      .filter(_.persistentId === key.persistentId)
+      .filter(_.persistenceId === key.persistenceId)
       .filter(_.entityId === key.entityId)
       .delete
 }

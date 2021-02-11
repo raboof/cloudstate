@@ -39,13 +39,13 @@ trait JdbcEntityTable {
                                _tableName = entityTableCfg.tableName) {
     def * : ProvenShape[EntityRow] = (key, typeUrl, state) <> (EntityRow.tupled, EntityRow.unapply)
 
-    val persistentId: Rep[String] =
-      column[String](entityTableCfg.columnNames.persistentId, O.Length(255, varying = true))
+    val persistenceId: Rep[String] =
+      column[String](entityTableCfg.columnNames.persistenceId, O.Length(255, varying = true))
     val entityId: Rep[String] = column[String](entityTableCfg.columnNames.entityId, O.Length(255, varying = true))
     val typeUrl: Rep[String] = column[String](entityTableCfg.columnNames.typeUrl, O.Length(255, varying = true))
     val state: Rep[Array[Byte]] = column[Array[Byte]](entityTableCfg.columnNames.state)
-    val key: MappedProjection[Key, (String, String)] = (persistentId, entityId) <> (Key.tupled, Key.unapply)
-    val pk = primaryKey(s"${tableName}_pk", (persistentId, entityId))
+    val key: MappedProjection[Key, (String, String)] = (persistenceId, entityId) <> (Key.tupled, Key.unapply)
+    val pk = primaryKey(s"${tableName}_pk", (persistenceId, entityId))
   }
 
   lazy val EntityTable = new TableQuery(tag => new Entity(tag))

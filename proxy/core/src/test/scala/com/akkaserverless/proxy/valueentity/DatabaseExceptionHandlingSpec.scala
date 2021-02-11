@@ -47,7 +47,7 @@ class DatabaseExceptionHandlingSpec extends AbstractTelemetrySpec {
   private val service = TestService()
   private val entityConfiguration = ValueEntity.Configuration(
     serviceName = "service",
-    userFunctionName = "test",
+    persistenceId = "test",
     passivationTimeout = 30.seconds,
     sendQueueSize = 100
   )
