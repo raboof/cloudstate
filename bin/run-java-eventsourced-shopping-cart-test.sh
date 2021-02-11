@@ -32,7 +32,7 @@ if [ "$build" == true ] ; then
   echo
   echo "Building java-eventsourced-shopping-cart ..."
   [ -f docker-env.sh ] && source docker-env.sh
-  sbt -Ddocker.username=cloudstatedev -Ddocker.tag=dev java-eventsourced-shopping-cart/docker:publishLocal
+  sbt -Ddocker.username=akkaserverlessdev -Ddocker.tag=dev java-eventsourced-shopping-cart/docker:publishLocal
 fi
 
 statefulstore="inmemory"
@@ -62,7 +62,7 @@ spec:
     statefulStore:
       name: $statefulstore
   containers:
-    - image: cloudstateio/java-eventsourced-shopping-cart:latest
+    - image: akkaserverless/java-eventsourced-shopping-cart:latest
       imagePullPolicy: Never
       name: user-function
 YAML

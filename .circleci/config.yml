@@ -1,5 +1,5 @@
 version: 2.1
-# CircleCi Build Config for CloudState
+# CircleCi Build Config for Akka Serverless proxy
 commands:
   install-java-11:
     description: install openjdk-11
@@ -21,7 +21,7 @@ commands:
     parameters:
       version:
         type: string
-        default: "1.3.13"
+        default: "1.4.7"
     steps:
       - run:
           name: Install sbt
@@ -100,17 +100,17 @@ jobs:
         command: sbt 'set concurrentRestrictions in Global += Tags.limitAll(1)' test
     - save_sbt_cache
 
-  test-node-support:
+  test-javascript-sdk:
     docker:
     - image: cimg/node:12.20.1
-    description: "node-support tests"
+    description: "javascript-sdk tests"
     steps:
     - checkout
     - run:
-        name: Run node-support tests
+        name: Run javascript-sdk tests
         command: |
-          cd node-support && npm install && npm test && cd -
-          cd node-support/docs/src/modules/javascript/examples && npm install && npm test && cd -
+          cd javascript-sdk && npm install && npm test && cd -
+          cd javascript-sdk/docs/src/modules/javascript/examples && npm install && npm test && cd -
           cd samples/js-shopping-cart && npm install && npm test && cd -
 
   validate-docs:
@@ -124,11 +124,10 @@ jobs:
     - run:
         name: Validate docs
         command: |
-          make -C docs
-          make -C java-support/docs
+          make -C java-sdk/docs
           source /opt/circleci/.nvm/nvm.sh
-          cd node-support && nvm install && cd -
-          make -C node-support/docs
+          cd javascript-sdk && nvm install && cd -
+          make -C javascript-sdk/docs
     - save_sbt_cache
 
   tck-integration-tests:
@@ -143,12 +142,12 @@ jobs:
           name: Run npm install
           command: |
             source /opt/circleci/.nvm/nvm.sh
-            cd node-support && nvm install && npm install && cd -
-            cd node-support/tck && nvm install && npm install && cd -
+            cd javascript-sdk && nvm install && npm install && cd -
+            cd javascript-sdk/tck && nvm install && npm install && cd -
       - run:
           name: Run TCK integration tests
           command: |
-            source /opt/circleci/.nvm/nvm.sh && cd node-support && nvm use && cd -
+            source /opt/circleci/.nvm/nvm.sh && cd javascript-sdk && nvm use && cd -
             sbt \
               'set concurrentRestrictions in Global += Tags.limitAll(1)' \
               'set scalafmtOnCompile := false' \
@@ -171,12 +170,12 @@ jobs:
             java-shopping-cart/docker:publishLocal \
             java-eventsourced-shopping-cart/docker:publishLocal
     - save_docker_image:
-        tar_file: cloudstate-sbt-images.tar
-        docker_image: cloudstateio/cloudstate-proxy-core:latest cloudstateio/java-shopping-cart:latest cloudstateio/java-eventsourced-shopping-cart:latest
+        tar_file: akkaserverless-sbt-images.tar
+        docker_image: akkaserverless/akkaserverless-proxy-core:latest akkaserverless/java-shopping-cart:latest akkaserverless/java-eventsourced-shopping-cart:latest
     - persist_to_workspace:
         root: /tmp/workspace
         paths:
-        - cloudstate-sbt-images.tar
+        - akkaserverless-sbt-images.tar
     - save_sbt_cache
 
   build-operator:
@@ -187,9 +186,9 @@ jobs:
     - checkout
     - restore_cache:
         keys:
-        - gomod-cache-{{ checksum "cloudstate-operator/go.sum" }}
+        - gomod-cache-{{ checksum "operator/go.sum" }}
     - run: KUBEBUILDER=yes KUSTOMIZE=yes CONTROLLER_GEN=yes bin/setup-devtools.sh
-    - run: make -C cloudstate-operator manifests test
+    - run: make -C operator manifests test
     - run: |
         if [ -n "$(git status --untracked-files=no --porcelain)" ]; then
           echo "code needs formatting or manifests need to be regenerated: use \"make manifests test\" and check in any resulting diffs"
@@ -197,16 +196,16 @@ jobs:
           exit 1
         fi
     - setup_remote_docker
-    - run: make -C cloudstate-operator docker-build
+    - run: make -C operator docker-build
     - save_docker_image:
-        tar_file: cloudstate-operator.tar
-        docker_image: cloudstateio/cloudstate-operator:latest
+        tar_file: operator.tar
+        docker_image: akkaserverless/cloudstate-operator:latest
     - persist_to_workspace:
         root: /tmp/workspace
         paths:
-        - cloudstate-operator.tar
+        - operator.tar
     - save_cache:
-        key: gomod-cache-{{ checksum "cloudstate-operator/go.sum" }}
+        key: gomod-cache-{{ checksum "operator/go.sum" }}
         paths:
         - /go/pkg/mod
 
@@ -221,15 +220,15 @@ jobs:
       - run:
           name: Load docker images
           command: |
-            docker image load < /tmp/workspace/cloudstate-sbt-images.tar
-            docker image load < /tmp/workspace/cloudstate-operator.tar
+            docker image load < /tmp/workspace/akkaserverless-sbt-images.tar
+            docker image load < /tmp/workspace/operator.tar
       - run:
           name: Deploy Cloudstate
           command: |
             kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.16.1/cert-manager.yaml
             echo "Waiting for cert-manager to be ready..."
             kubectl wait --for=condition=available --timeout=2m -n cert-manager deployment/cert-manager-webhook
-            kubectl apply --validate=false -f cloudstate-operator/manifests/cloudstate-operator.yaml
+            kubectl apply --validate=false -f operator/manifests/cloudstate-operator.yaml
             echo "Waiting for operator deployment to be ready..."
             if ! kubectl wait --for=condition=available --timeout=2m -n cloudstate-system deployment/cloudstate-controller-manager
             then
@@ -252,7 +251,7 @@ workflows:
   Tests:
     jobs:
       - test-sbt
-      - test-node-support
+      - test-javascript-sdk
       - validate-docs
       - tck-integration-tests
   Integration tests:

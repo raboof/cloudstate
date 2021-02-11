@@ -5,32 +5,32 @@ import sbt.url
 
 inThisBuild(
   Seq(
-    organization := "io.cloudstate",
+    organization := "com.akkaserverless",
     scalaVersion := "2.13.3",
     organizationName := "Lightbend Inc.",
     organizationHomepage := Some(url("https://lightbend.com")),
+    // TODO: licence can be removed once Java SDK has moved to its own public repo
     startYear := Some(2019),
     licenses += ("Apache-2.0", new URL("https://www.apache.org/licenses/LICENSE-2.0.txt")),
-    homepage := Some(url("https://cloudstate.io")),
+    homepage := Some(url("https://akkaserverless.com")),
     scmInfo := Some(
         ScmInfo(
-          url("https://github.com/cloudstateio/cloudstate"),
-          "scm:git@github.com:cloudstateio/cloudstate.git"
+          url("https://github.com/lightbend/akkaserverless-proxy"),
+          "scm:git@github.com:lightbend/akkaserverless-proxy.git"
         )
       ),
     developers := List(
-        Developer(id = "jroper", name = "James Roper", email = "james@jazzy.id.au", url = url("https://jazzy.id.au")),
-        Developer(id = "viktorklang",
-                  name = "Viktor Klang",
-                  email = "viktor.klang@gmail.com",
-                  url = url("https://viktorklang.com"))
+        Developer(id = "akka-serverless-team",
+                  name = "Akka Serverless Team",
+                  email = "info@lightbend.com",
+                  url = url("https://lightbend.com"))
       ),
     scalafmtOnCompile := true,
     closeClassLoaders := false
   )
 )
 
-name := "cloudstate"
+name := "akkaserverless-proxy"
 
 val ProtocolMajorVersion = 0
 val ProtocolMinorVersion = 2
@@ -92,12 +92,12 @@ def common: Seq[Setting[_]] = automateHeaderSettings(Compile, Test) ++ Seq(
 
 // Include sources from the npm projects
 headerSources in Compile ++= {
-  val nodeSupport = baseDirectory.value / "node-support"
+  val javascriptSdk = baseDirectory.value / "javascript-sdk"
   val jsShoppingCart = baseDirectory.value / "samples" / "js-shopping-cart"
 
   Seq(
-    nodeSupport / "src" ** "*.js",
-    nodeSupport * "*.js",
+    javascriptSdk / "src" ** "*.js",
+    javascriptSdk * "*.js",
     jsShoppingCart * "*.js",
     jsShoppingCart / "test" ** "*.js"
   ).flatMap(_.get)
@@ -110,9 +110,9 @@ lazy val root = (project in file("."))
   .aggregate(
     `protocols`,
     `proxy`,
-    `java-support`,
-    `java-support-docs`,
-    `java-support-tck`,
+    `java-sdk`,
+    `java-sdk-docs`,
+    `java-sdk-tck`,
     `java-eventsourced-shopping-cart`,
     `java-shopping-cart`,
     `java-pingpong`,
@@ -130,10 +130,10 @@ lazy val protocols = (project in file("protocols"))
       val base = baseDirectory.value
       val targetDir = target.value
       val releaseVersion = version.value
-      val cloudstateProtocolsName = s"cloudstate-protocols-$releaseVersion"
-      val cloudstateTCKProtocolsName = s"cloudstate-tck-protocols-$releaseVersion"
-      val cloudstateProtocolsZip = targetDir / s"$cloudstateProtocolsName.zip"
-      val cloudstateTCKProtocolsZip = targetDir / s"$cloudstateTCKProtocolsName.zip"
+      val akkaserverlessProtocolsName = s"akkaserverless-protocols-$releaseVersion"
+      val akkaserverlessTCKProtocolsName = s"akkaserverless-tck-protocols-$releaseVersion"
+      val akkaserverlessProtocolsZip = targetDir / s"$akkaserverlessProtocolsName.zip"
+      val akkaserverlessTCKProtocolsZip = targetDir / s"$akkaserverlessTCKProtocolsName.zip"
 
       def archiveStructure(topDirName: String, files: PathFinder): Seq[(File, String)] =
         files pair Path.relativeTo(base) map {
@@ -143,24 +143,24 @@ lazy val protocols = (project in file("protocols"))
       // Common Language Support Proto Dependencies
       IO.zip(
         archiveStructure(
-          cloudstateProtocolsName,
+          akkaserverlessProtocolsName,
           base / "frontend" ** "*.proto" +++
           base / "protocol" ** "*.proto"
         ),
-        cloudstateProtocolsZip
+        akkaserverlessProtocolsZip
       )
 
       // Common TCK Language Support Proto Dependencies
       IO.zip(
         archiveStructure(
-          cloudstateTCKProtocolsName,
+          akkaserverlessTCKProtocolsName,
           base / "example" ** "*.proto" +++
           base / "tck" ** "*.proto"
         ),
-        cloudstateTCKProtocolsZip
+        akkaserverlessTCKProtocolsZip
       )
 
-      cloudstateProtocolsZip
+      akkaserverlessProtocolsZip
     }
   )
 
@@ -172,7 +172,7 @@ def dockerSettings: Seq[Setting[_]] = Seq(
   proxyDockerBuild := None,
   dockerUpdateLatest := true,
   dockerRepository := sys.props.get("docker.registry"),
-  dockerUsername := sys.props.get("docker.username").orElse(Some("cloudstateio")).filter(_ != ""),
+  dockerUsername := sys.props.get("docker.username").orElse(Some("akkaserverless")).filter(_ != ""),
   dockerBaseImage := DockerBaseImageVersion,
   // when using tags like latest, uncomment below line, so that local cache will not be used.
   //  dockerBuildOptions += "--no-cache",
@@ -236,14 +236,14 @@ lazy val `proxy-core` = (project in file("proxy/core"))
   )
   .settings(
     common,
-    name := "cloudstate-proxy-core",
+    name := "akkaserverless-proxy-core",
     buildInfoKeys := Seq[BuildInfoKey](
         name,
         version,
         "protocolMajorVersion" -> ProtocolMajorVersion,
         "protocolMinorVersion" -> ProtocolMinorVersion
       ),
-    buildInfoPackage := "io.cloudstate.proxy",
+    buildInfoPackage := "com.akkaserverless.proxy",
     libraryDependencies ++= Seq(
         // Since we exclude Aeron, we also exclude its transitive Agrona dependency, so we need to manually add it HERE
         "org.agrona" % "agrona" % "0.9.29",
@@ -286,12 +286,12 @@ lazy val `proxy-core` = (project in file("proxy/core"))
     },
     // For Google Cloud Pubsub API
     PB.protoSources in Compile += target.value / "protobuf_external" / "google" / "pubsub" / "v1",
-    mainClass in Compile := Some("io.cloudstate.proxy.CloudStateProxyMain"),
+    mainClass in Compile := Some("com.akkaserverless.proxy.AkkaServerlessProxyMain"),
     run / fork := true,
     // In memory journal by default
     run / javaOptions ++= Seq("-Dconfig.resource=dev-mode.conf"),
     reStart / javaOptions ++= Seq("-Dconfig.resource=dev-mode.conf"),
-    assemblySettings("akka-proxy.jar"),
+    assemblySettings("akkaserverless-proxy.jar"),
     dockerSettings,
     proxySettings
   )
@@ -303,7 +303,7 @@ lazy val `proxy-spanner` = (project in file("proxy/spanner"))
   )
   .settings(
     common,
-    name := "cloudstate-proxy-spanner",
+    name := "akkaserverless-proxy-spanner",
     libraryDependencies ++= Seq(
         "com.lightbend.akka" %% "akka-persistence-spanner" % AkkaPersistenceSpannerVersion,
         akkaDependency("akka-cluster-typed"), // Transitive dependency of akka-persistence-spanner
@@ -312,8 +312,8 @@ lazy val `proxy-spanner` = (project in file("proxy/spanner"))
         "org.scalatest" %% "scalatest" % ScalaTestVersion % Test
       ),
     fork in run := true,
-    mainClass in Compile := Some("io.cloudstate.proxy.spanner.CloudstateSpannerProxyMain"),
-    assemblySettings("akka-proxy.jar"),
+    mainClass in Compile := Some("com.akkaserverless.proxy.spanner.AkkaServerlessSpannerProxyMain"),
+    assemblySettings("akkaserverless-proxy-spanner.jar"),
     dockerSettings,
     proxySettings
   )
@@ -323,7 +323,7 @@ lazy val `proxy-tests` = (project in file("proxy/proxy-tests"))
   .dependsOn(`proxy-core`, `akka-client`, `java-pingpong`)
   .settings(
     common,
-    name := "cloudstate-proxy-tests",
+    name := "akkaserverless-proxy-tests",
     fork in Test := System.getProperty("RUN_STRESS_TESTS", "false") == "true",
     parallelExecution in Test := false,
     baseDirectory in Test := (baseDirectory in ThisBuild).value,
@@ -333,12 +333,12 @@ lazy val `proxy-tests` = (project in file("proxy/proxy-tests"))
       )
   )
 
-lazy val `java-support` = (project in file("java-support"))
+lazy val `java-sdk` = (project in file("java-sdk"))
   .enablePlugins(AkkaGrpcPlugin, BuildInfoPlugin)
   .dependsOn(testkit % Test)
   .settings(
-    name := "cloudstate-java-support",
-    dynverTagPrefix := "java-support-",
+    name := "akkaserverless-java-sdk",
+    dynverTagPrefix := "java-support-", // use old tag prefix
     common,
     crossPaths := false,
     publishMavenStyle := true,
@@ -348,7 +348,7 @@ lazy val `java-support` = (project in file("java-support"))
         "protocolMajorVersion" -> ProtocolMajorVersion,
         "protocolMinorVersion" -> ProtocolMinorVersion
       ),
-    buildInfoPackage := "io.cloudstate.javasupport",
+    buildInfoPackage := "com.akkaserverless.javasdk",
     // Generate javadocs by just including non generated Java sources
     sourceDirectories in (Compile, doc) := Seq((javaSource in Compile).value),
     sources in (Compile, doc) := {
@@ -364,7 +364,7 @@ lazy val `java-support` = (project in file("java-support"))
         "--no-module-directories",
         "-notimestamp",
         "-doctitle",
-        "Cloudstate Java Support"
+        "Akka Serverless Java SDK"
       ),
     libraryDependencies ++= Seq(
         akkaDependency("akka-stream"),
@@ -404,11 +404,11 @@ lazy val `java-support` = (project in file("java-support"))
     )
   )
 
-lazy val `java-support-docs` = (project in file("java-support/docs"))
-  .dependsOn(`java-support` % Test)
+lazy val `java-sdk-docs` = (project in file("java-sdk/docs"))
+  .dependsOn(`java-sdk` % Test)
   .enablePlugins(AkkaGrpcPlugin, AutomateHeaderPlugin, NoPublish)
   .settings(
-    name := "cloudstate-java-docs",
+    name := "akkaserverless-java-sdk-docs",
     akkaGrpcGeneratedLanguages := Seq(AkkaGrpc.Java),
     Test / unmanagedSourceDirectories += sourceDirectory.value / "modules" / "java" / "examples",
     Test / PB.protoSources += (baseDirectory in ThisBuild).value / "protocols" / "frontend",
@@ -417,28 +417,28 @@ lazy val `java-support-docs` = (project in file("java-support/docs"))
     Compile / javacOptions ++= Seq("-encoding", "UTF-8", "-source", "11", "-target", "11")
   )
 
-lazy val `java-support-tck` = (project in file("java-support/tck"))
-  .dependsOn(`java-support`)
+lazy val `java-sdk-tck` = (project in file("java-sdk/tck"))
+  .dependsOn(`java-sdk`)
   .enablePlugins(AkkaGrpcPlugin, AssemblyPlugin, JavaAppPackaging, DockerPlugin, AutomateHeaderPlugin, NoPublish)
   .settings(
-    name := "cloudstate-java-tck",
-    dynverTagPrefix := "java-support-",
+    name := "akkaserverless-java-sdk-tck",
+    dynverTagPrefix := "java-support-", // use old tag prefix
     dockerSettings,
-    mainClass in Compile := Some("io.cloudstate.javasupport.tck.JavaSupportTck"),
+    mainClass in Compile := Some("com.akkaserverless.javasdk.tck.JavaSdkTck"),
     akkaGrpcGeneratedLanguages := Seq(AkkaGrpc.Java),
     PB.protoSources in Compile += (baseDirectory in ThisBuild).value / "protocols" / "tck",
     javacOptions in Compile ++= Seq("-encoding", "UTF-8", "-source", "11", "-target", "11"),
-    assemblySettings("cloudstate-java-tck.jar")
+    assemblySettings("akkaserverless-java-sdk-tck.jar")
   )
 
 lazy val `java-eventsourced-shopping-cart` = (project in file("samples/java-eventsourced-shopping-cart"))
-  .dependsOn(`java-support`)
+  .dependsOn(`java-sdk`)
   .enablePlugins(AkkaGrpcPlugin, AssemblyPlugin, JavaAppPackaging, DockerPlugin, AutomateHeaderPlugin, NoPublish)
   .settings(
     name := "java-eventsourced-shopping-cart",
     dockerSettings,
-    mainClass in Compile := Some("io.cloudstate.samples.eventsourced.shoppingcart.Main"),
-    PB.generate in Compile := (PB.generate in Compile).dependsOn(PB.generate in (`java-support`, Compile)).value,
+    mainClass in Compile := Some("com.akkaserverless.samples.eventsourced.shoppingcart.Main"),
+    PB.generate in Compile := (PB.generate in Compile).dependsOn(PB.generate in (`java-sdk`, Compile)).value,
     akkaGrpcGeneratedLanguages := Seq(AkkaGrpc.Java),
     PB.protoSources in Compile ++= {
       val baseDir = (baseDirectory in ThisBuild).value / "protocols"
@@ -452,13 +452,13 @@ lazy val `java-eventsourced-shopping-cart` = (project in file("samples/java-even
   )
 
 lazy val `java-shopping-cart` = (project in file("samples/java-shopping-cart"))
-  .dependsOn(`java-support`)
+  .dependsOn(`java-sdk`)
   .enablePlugins(AkkaGrpcPlugin, AssemblyPlugin, JavaAppPackaging, DockerPlugin, AutomateHeaderPlugin, NoPublish)
   .settings(
     name := "java-shopping-cart",
     dockerSettings,
-    mainClass in Compile := Some("io.cloudstate.samples.shoppingcart.Main"),
-    PB.generate in Compile := (PB.generate in Compile).dependsOn(PB.generate in (`java-support`, Compile)).value,
+    mainClass in Compile := Some("com.akkaserverless.samples.shoppingcart.Main"),
+    PB.generate in Compile := (PB.generate in Compile).dependsOn(PB.generate in (`java-sdk`, Compile)).value,
     akkaGrpcGeneratedLanguages := Seq(AkkaGrpc.Java),
     PB.protoSources in Compile ++= {
       val baseDir = (baseDirectory in ThisBuild).value / "protocols"
@@ -472,13 +472,13 @@ lazy val `java-shopping-cart` = (project in file("samples/java-shopping-cart"))
   )
 
 lazy val `java-pingpong` = (project in file("samples/java-pingpong"))
-  .dependsOn(`java-support`)
+  .dependsOn(`java-sdk`)
   .enablePlugins(AkkaGrpcPlugin, AssemblyPlugin, JavaAppPackaging, DockerPlugin, AutomateHeaderPlugin, NoPublish)
   .settings(
     name := "java-pingpong",
     dockerSettings,
-    mainClass in Compile := Some("io.cloudstate.samples.pingpong.Main"),
-    PB.generate in Compile := (PB.generate in Compile).dependsOn(PB.generate in (`java-support`, Compile)).value,
+    mainClass in Compile := Some("com.akkaserverless.samples.pingpong.Main"),
+    PB.generate in Compile := (PB.generate in Compile).dependsOn(PB.generate in (`java-sdk`, Compile)).value,
     akkaGrpcGeneratedLanguages := Seq(AkkaGrpc.Java),
     PB.protoSources in Compile ++= {
       val baseDir = (baseDirectory in ThisBuild).value / "protocols"
@@ -528,14 +528,14 @@ lazy val `testkit` = (project in file("testkit"))
   .enablePlugins(AkkaGrpcPlugin, BuildInfoPlugin)
   .settings(
     common,
-    name := "cloudstate-testkit",
+    name := "akkaserverless-testkit",
     buildInfoKeys := Seq[BuildInfoKey](
         name,
         version,
         "protocolMajorVersion" -> ProtocolMajorVersion,
         "protocolMinorVersion" -> ProtocolMinorVersion
       ),
-    buildInfoPackage := "io.cloudstate.testkit",
+    buildInfoPackage := "com.akkaserverless.testkit",
     libraryDependencies ++= Seq(
         akkaDependency("akka-stream-testkit"),
         "com.google.protobuf" % "protobuf-java" % ProtobufVersion % "protobuf",
@@ -551,7 +551,7 @@ lazy val `tck` = (project in file("tck"))
   .settings(
     Defaults.itSettings,
     common,
-    name := "cloudstate-tck",
+    name := "akkaserverless-tck",
     libraryDependencies ++= Seq(
         akkaDependency("akka-stream"),
         akkaDependency("akka-discovery"),
@@ -567,7 +567,7 @@ lazy val `tck` = (project in file("tck"))
     },
     dockerSettings,
     Compile / bashScriptDefines / mainClass := Some("org.scalatest.run"),
-    bashScriptExtraDefines += "addApp io.cloudstate.tck.ConfiguredCloudstateTCK",
+    bashScriptExtraDefines += "addApp com.akkaserverless.tck.ConfiguredAkkaServerlessTCK",
     headerSettings(IntegrationTest),
     automateHeaderSettings(IntegrationTest),
     fork in IntegrationTest := true,
@@ -575,6 +575,6 @@ lazy val `tck` = (project in file("tck"))
         .flatMap(key => sys.props.get(key).map(value => s"-D$key=$value")),
     parallelExecution in IntegrationTest := false,
     executeTests in IntegrationTest := (executeTests in IntegrationTest)
-        .dependsOn(`proxy-core` / assembly, `java-support-tck` / assembly)
+        .dependsOn(`proxy-core` / assembly, `java-sdk-tck` / assembly)
         .value
   )
