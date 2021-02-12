@@ -56,6 +56,10 @@ import scala.concurrent.duration.DurationInt
  * These tests should be run against Spanner Emulator to verify that the schema creation works.
  * Spanner Emulator needs to be set up like this:
  *
+ * First create a local configuration as documented at https://cloud.google.com/spanner/docs/emulator#using_the_gcloud_cli_with_the_emulator
+ *
+ * Then:
+ *
  * ```
  * gcloud beta emulators spanner start
  * gcloud spanner instances create test-instance --config=emulator-config --description="Test Instance" --nodes=1
@@ -77,7 +81,7 @@ object SchemaCheckTests {
     val done =
       SchemaCheck
         .tryCreateSchema(database, ddl, 1.second, 10.seconds, adminClient, operationsClient, system.scheduler)
-        .andThen { case result => println(result) }
+        .andThen { case result => println("SchemaCheckTests: " + result) }
         .andThen { case _ => system.terminate() }
 
     Await.ready(done, 42.seconds)
